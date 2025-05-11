@@ -1,6 +1,7 @@
-python-telegram-bot==20.7
+python-telegram-bot[job-queue]==20.7
 requests==2.31.0
 pandas==2.2.0
 numpy==1.26.3
 python-dotenv==1.0.1
 feedparser==6.0.10
+pyarrow==16.1.0  # Thêm để tránh cảnh báo pandas
