@@ -11,6 +11,7 @@ import feedparser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import json
+import asyncio
 
 # Cấu hình logging
 logging.basicConfig(
@@ -43,7 +44,16 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
 # Hàm chạy server webhook
 def run_webhook_server():
-    port = int(os.getenv('PORT', 8443))  # Lấy cổng từ biến môi trường
+    default_port = 8443
+    port_str = os.getenv('PORT', str(default_port))
+    try:
+        port = int(port_str)
+        if not (1 <= port <= 65535):
+            raise ValueError(f"Invalid port number: {port}")
+    except ValueError as e:
+        logger.error(f"Invalid PORT value: {port_str}. Using default port {default_port}")
+        port = default_port
+    
     server = HTTPServer(('0.0.0.0', port), WebhookHandler)
     logger.info(f"Starting webhook server on port {port}...")
     server.serve_forever()
@@ -306,7 +316,7 @@ class TinhieuBTCBot:
             return "BÁN MẠNH 🔴"
         elif buy_signals > sell_signals:
             return "CÓ THỂ MUA 🟡"
-        elif sell_signals > sell_signals:
+        elif sell_signals > buy_signals:
             return "CÓ THỂ BÁN 🟠"
         else:
             return "CHỜ TÍN HIỆU ⚪"
@@ -486,30 +496,51 @@ async def main():
         
         # Thiết lập webhook
         webhook_url = os.getenv('WEBHOOK_URL')
-        port = int(os.getenv('PORT', 8443))
+        default_port = 8443
+        port_str = os.getenv('PORT', str(default_port))
+        try:
+            port = int(port_str)
+            if not (1 <= port <= 65535):
+                raise ValueError(f"Invalid port number: {port}")
+        except ValueError as e:
+            logger.error(f"Invalid PORT value: {port_str}. Using default port {default_port}")
+            port = default_port
+        
+        # Khởi động server webhook trong luồng riêng
+        threading.Thread(target=run_webhook_server, daemon=True).start()
+        
         if webhook_url:
-            # Khởi động server webhook
-            threading.Thread(target=run_webhook_server, daemon=True).start()
-            
-            # Thiết lập webhook sau khi server chạy
+            # Đợi một chút để server webhook khởi động
+            await asyncio.sleep(1)
+            # Thiết lập webhook
             await application.bot.set_webhook(f"{webhook_url}/webhook")
             logger.info(f"Webhook set to {webhook_url}/webhook")
             
-            # Khởi động ứng dụng
-            await application.run_webhook(
+            # Khởi động ứng dụng với webhook
+            await application.initialize()
+            await application.start()
+            await application.updater.start_webhook(
                 listen='0.0.0.0',
                 port=port,
                 url_path='/webhook',
                 webhook_url=f"{webhook_url}/webhook"
             )
+            logger.info("🤖 Bot đang chạy với webhook...")
+            
+            # Giữ ứng dụng chạy
+            while True:
+                await asyncio.sleep(3600)  # Ngủ 1 giờ để giữ luồng chính chạy
         else:
             logger.warning("WEBHOOK_URL not set, falling back to polling")
             await application.run_polling()
         
-        logger.info("🤖 Bot đang khởi động...")
-        
     except Exception as e:
         logger.error(f"Lỗi khởi động: {str(e)}")
+        raise
+    finally:
+        if 'application' in locals():
+            await application.stop()
+            await application.shutdown()
 
 if __name__ == '__main__':
     # Kiểm tra kết nối OKX
@@ -517,7 +548,6 @@ if __name__ == '__main__':
     analyzer = OKXAnalyzer()
     if analyzer.get_btc_data(limit=1) is not None:
         print("✅ Kết nối OKX ổn định!")
-        import asyncio
         asyncio.run(main())
     else:
         print("❌ Lỗi kết nối OKX")
