@@ -8,9 +8,6 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 import feedparser
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
-import json
 import asyncio
 
 # Cấu hình logging
@@ -26,37 +23,6 @@ logger = logging.getLogger(__name__)
 
 # Load biến môi trường
 load_dotenv()
-
-# Lớp xử lý webhook
-class WebhookHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length).decode('utf-8')
-            update = Update.de_json(json.loads(post_data), app.bot)
-            app.process_update(update)
-            self.send_response(200)
-            self.end_headers()
-        except Exception as e:
-            logger.error(f"Webhook handler error: {str(e)}")
-            self.send_response(500)
-            self.end_headers()
-
-# Hàm chạy server webhook
-def run_webhook_server():
-    default_port = 8443
-    port_str = os.getenv('PORT', str(default_port))
-    try:
-        port = int(port_str)
-        if not (1 <= port <= 65535):
-            raise ValueError(f"Invalid port number: {port}")
-    except ValueError as e:
-        logger.error(f"Invalid PORT value: {port_str}. Using default port {default_port}")
-        port = default_port
-    
-    server = HTTPServer(('0.0.0.0', port), WebhookHandler)
-    logger.info(f"Starting webhook server on port {port}...")
-    server.serve_forever()
 
 # Lớp phân tích dữ liệu từ OKX
 class OKXAnalyzer:
@@ -479,11 +445,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Hàm chính
 async def main():
     """Hàm chính khởi chạy bot"""
-    global app
     try:
         # Khởi tạo ứng dụng
         application = Application.builder().token(os.getenv('TELEGRAM_BOT_TOKEN')).build()
-        app = application
         bot = TinhieuBTCBot(application)
         
         # Thêm các handler
@@ -506,12 +470,7 @@ async def main():
             logger.error(f"Invalid PORT value: {port_str}. Using default port {default_port}")
             port = default_port
         
-        # Khởi động server webhook trong luồng riêng
-        threading.Thread(target=run_webhook_server, daemon=True).start()
-        
         if webhook_url:
-            # Đợi một chút để server webhook khởi động
-            await asyncio.sleep(1)
             # Thiết lập webhook
             await application.bot.set_webhook(f"{webhook_url}/webhook")
             logger.info(f"Webhook set to {webhook_url}/webhook")
