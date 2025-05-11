@@ -306,7 +306,7 @@ class TinhieuBTCBot:
             return "BÁN MẠNH 🔴"
         elif buy_signals > sell_signals:
             return "CÓ THỂ MUA 🟡"
-        elif sell_signals > buy_signals:
+        elif sell_signals > sell_signals:
             return "CÓ THỂ BÁN 🟠"
         else:
             return "CHỜ TÍN HIỆU ⚪"
@@ -459,7 +459,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Volume giao dịch\n"
         "✅ Bollinger Bands Width\n"
         "✅ RSI\n"
-        "✅ Kháng cự/hỗ trợ\n\n on"
+        "✅ Kháng cự/hỗ trợ\n\n"
         "Gõ /analyze để xem khuyến nghị hiện tại\n"
         "hoặc nhấn nút bên dưới để tương tác ngay!",
         parse_mode='HTML',
@@ -467,7 +467,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # Hàm chính
-def main():
+async def main():
     """Hàm chính khởi chạy bot"""
     global app
     try:
@@ -486,23 +486,25 @@ def main():
         
         # Thiết lập webhook
         webhook_url = os.getenv('WEBHOOK_URL')
+        port = int(os.getenv('PORT', 8443))
         if webhook_url:
-            application.bot.set_webhook(f"{webhook_url}/webhook")
-            logger.info(f"Webhook set to {webhook_url}/webhook")
-            
-            # Chạy server webhook trong thread riêng
+            # Khởi động server webhook
             threading.Thread(target=run_webhook_server, daemon=True).start()
             
+            # Thiết lập webhook sau khi server chạy
+            await application.bot.set_webhook(f"{webhook_url}/webhook")
+            logger.info(f"Webhook set to {webhook_url}/webhook")
+            
             # Khởi động ứng dụng
-            application.run_webhook(
+            await application.run_webhook(
                 listen='0.0.0.0',
-                port=int(os.getenv('PORT', 8443)),
+                port=port,
                 url_path='/webhook',
                 webhook_url=f"{webhook_url}/webhook"
             )
         else:
             logger.warning("WEBHOOK_URL not set, falling back to polling")
-            application.run_polling()
+            await application.run_polling()
         
         logger.info("🤖 Bot đang khởi động...")
         
@@ -515,6 +517,7 @@ if __name__ == '__main__':
     analyzer = OKXAnalyzer()
     if analyzer.get_btc_data(limit=1) is not None:
         print("✅ Kết nối OKX ổn định!")
-        main()
+        import asyncio
+        asyncio.run(main())
     else:
         print("❌ Lỗi kết nối OKX")
