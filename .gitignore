@@ -1,0 +1,4 @@
+.env
+tinhieu_bot.log
+__pycache__/
+*.pyc
